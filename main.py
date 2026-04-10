@@ -1,6 +1,27 @@
 import hashlib
 from cryptography.fernet import Fernet
 import json
+import os
+
+#Only way i could think of making delete_password() easy => global
+passwords = []
+
+def load_passwords():
+    if not os.path.exists("vault.json"):
+        print("File 'vault.json' does not exist!")
+        return
+    
+    global passwords
+    passwords = []
+    try:
+        with open("vault.json", "r") as f:
+            for line in f:
+                password_dict = json.loads(line)
+                passwords.append(password_dict)
+    except PermissionError:
+        print("Permission denied")
+        return
+
 
 def check_key(key):
     enc_key = key.encode()
@@ -45,6 +66,7 @@ def add_password():
         with open("vault.json", "a+") as f:
             f.write(encrypted_password_json)   # to-do: check duplicate capability
             f.write("\n")
+            load_passwords()
     except PermissionError:
         print("Permission denied")
 
@@ -67,17 +89,10 @@ def decrypt_password(password):
 
 def view_passwords():
     print("\n->> View passwords <<-")
-    passwords = []
-    try:
-        with open("vault.json", "r") as f:
-            for line in f:
-                password_dict = json.loads(line)
-                passwords.append(password_dict)
-    except FileNotFoundError:
-        print("File 'vault.json' does not exist!")
-        return
-    except PermissionError:
-        print("Permission denied")
+
+    load_passwords()
+    if not passwords:
+        print("No passwords")
         return
 
     for i in range(0, len(passwords)):
@@ -90,8 +105,30 @@ def view_passwords():
         print(f"      Password: {decrypt_password(password[key]['password'].strip())}")
 
 
-#def delete_password():
+def delete_password():
+    print("\n->> Delete password <<-")
+    view_passwords()
+    global passwords
+    try:
+        opt = int(input(f"\nSelect password to delete (1 - {len(passwords)}): "))
+    except ValueError:
+        print("\n ->Please enter a valid option!\n")
+        return
     
+    if opt < 1 or opt > len(passwords):
+        print("\n ->Please enter a valid option!\n")
+        return
+    
+    del passwords[opt-1]
+    
+    try:
+        print("\nWriting to 'vault.json'...")
+        with open("vault.json", "a+") as f:
+            for i in range(0, len(passwords)):
+                passwords[i][""]
+
+    except PermissionError:
+        print("Permission denied")
 
 
 def main():
@@ -125,9 +162,9 @@ def main():
                     """
                 case 3:
                     search_password()
+                    """
                 case 4:
                     delete_password()
-                    """
                 case 5:
                     break
         except ValueError:
