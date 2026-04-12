@@ -3,25 +3,7 @@ from cryptography.fernet import Fernet
 import json
 import os
 
-#Only way i could think of making delete_password() easy => global
 passwords = []
-
-def load_passwords():
-    if not os.path.exists("vault.json"):
-        print("File 'vault.json' does not exist!")
-        return
-    
-    global passwords
-    passwords = []
-    try:
-        with open("vault.json", "r") as f:
-            for line in f:
-                password_dict = json.loads(line)
-                passwords.append(password_dict)
-    except PermissionError:
-        print("Permission denied")
-        return
-
 
 def check_key(key):
     enc_key = key.encode()
@@ -46,31 +28,26 @@ def check_key(key):
 
 
 def add_password():
-    print("\n->> Add passord <<-")
-    service = input("Service/site: ")
+    site = input("Service/site: ")
     username = input("Username: ")
     password = input("Password: ")
 
     encrypted_password = encrypt_password(password)
+    
+    encrypted_password_dict = {
+        "site" : site,
+        "username" : username,
+        "password" : encrypted_password
+    }
 
-    #convert to json
-    encrypted_password_json = json.dumps({
-        service : {
-            "username" : username,
-            "password" : encrypted_password
-        }
-    })
+    encrypted_password_json = json.dumps(encrypted_password_dict)
+    
+    print("\nSaving password...")
+    saved = save_password(encrypted_password_json)
+    if not saved: 
+        print("An error occured!")
 
-    try:
-        print("\nWriting to 'vault.json'...")
-        with open("vault.json", "a+") as f:
-            f.write(encrypted_password_json)   # to-do: check duplicate capability
-            f.write("\n")
-            load_passwords()
-    except PermissionError:
-        print("Permission denied")
-
-    return True
+    print("Password saved!")
 
 def encrypt_password(password):
     with open("key") as f:
@@ -86,31 +63,60 @@ def decrypt_password(password):
     fern = Fernet(key)
     return fern.decrypt(password.encode()).decode()
 
+def save_password(encrypted_password_json):
+    print("\nWriting to 'vault.json'...")
+    try:
+        with open("vault.json", "a") as f:
+            f.write(encrypted_password_json)
+            f.write('\n')
+            return True
+    except PermissionError:
+        print("Permission denied!")
+        return False
+
 
 def view_passwords():
-    print("\n->> View passwords <<-")
 
     load_passwords()
     if not passwords:
-        print("No passwords")
+        print("\nNo passwords yet!")
         return
-
-    for i in range(0, len(passwords)):
-        password = passwords[i]
-        r = list(password.keys())
-        key = r[0]
     
-        print(f"\n{i+1}. {key}: ")
-        print(f"      Username: {password[key]['username']}")
-        print(f"      Password: {decrypt_password(password[key]['password'].strip())}")
+    #print(passwords)
+
+    for i in range (0, len(passwords)):
+        password = passwords[i]
+        print(f"\n{i+1}. {password["site"]}")
+        print(f"       Username: {password["username"]}")
+        print(f"       Password: {decrypt_password(password["password"].strip())}")
+        
+
+def load_passwords():
+    global passwords
+    passwords = []
+
+    try:
+        print("\nReading 'vault.json'...")
+        with open("vault.json", "r") as f:
+            for line in f:
+                password_dict = json.loads(line)
+                passwords.append(password_dict)
+    except FileNotFoundError:
+        print("File 'vault.json' doesn't exist!")
+    except PermissionError:
+        print("Permission denied")
 
 
 def delete_password():
-    print("\n->> Delete password <<-")
     view_passwords()
     global passwords
     try:
-        opt = int(input(f"\nSelect password to delete (1 - {len(passwords)}): "))
+        if len(passwords) == 0:
+            return
+        elif len(passwords) == 1:
+            opt = int(input(f"\nSelect password to delete (1): "))
+        else:
+            opt = int(input(f"\nSelect password to delete (1 - {len(passwords)}): "))
     except ValueError:
         print("\n ->Please enter a valid option!\n")
         return
@@ -120,26 +126,56 @@ def delete_password():
         return
     
     del passwords[opt-1]
-    
+    save_passwords()
+    print("Password deleted!")
+
+def save_passwords():
+    global passwords
+    print("Writing to 'vault.json'...")
     try:
-        print("\nWriting to 'vault.json'...")
-        with open("vault.json", "a+") as f:
-            for i in range(0, len(passwords)):
-                passwords[i][""]
-
+        with open("vault.json", "w") as f:
+            for password in passwords:
+                f.write(json.dumps(password))
+                f.write('\n')
+    except FileNotFoundError:
+        print("File 'vault.json' does not exist!")
+        return
     except PermissionError:
-        print("Permission denied")
+        print("Permission denied!")
+        return
 
+
+def search_password():
+    search_term = input("Search for: ").strip().lower()
+
+    load_passwords()
+    if not passwords:
+        print("\nNo passwords yet!")
+
+    i = 0
+    for password in passwords:
+        if search_term in password["site"].strip().lower():
+            i+=1
+            print(f"\n{i}. {password["site"]}")
+            print(f"       Username: {password["username"]}")
+            print(f"       Password: {decrypt_password(password["password"].strip())}")
+            
+    if i == 0:
+        print("No matching patterns found!")
+        
 
 def main():
 
     print("====== Password Manager ========")
-    key = input("Enter master key: ")
-    correct = check_key(key)
-    
-    if not correct:
-        return
-    
+    for i in range (0, 3):
+        key = input("Enter master key: ")
+        correct = check_key(key)
+        
+        if correct:
+            break
+        if i == 2:
+            return
+
     while True:
         print("\n---- Options ----")
         print("1. Add password")
@@ -152,18 +188,16 @@ def main():
             opt = int(input("Select option: "))
             match opt:
                 case 1:
+                    print("\n->> Add passwords <<-")
                     added = add_password()
-                    if added:
-                        print("Password added!")
-                    else:
-                        print("Password already exists!")
                 case 2:
+                    print("\n->> View passwords <<-")
                     view_passwords()
-                    """
                 case 3:
+                    print("\n->> Search passwords <<-")
                     search_password()
-                    """
                 case 4:
+                    print("\n->> Delete passwords <<-")
                     delete_password()
                 case 5:
                     break
